@@ -1,9 +1,13 @@
 import datetime
 import os
 import requests
-import json
 import streamlit as st
 from bs4 import BeautifulSoup
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 # --- CONFIGURATION SÉCURISÉE ---
 MAX_MESSAGES_PER_SESSION = 15  # Limite pour les utilisateurs normaux
@@ -50,7 +54,7 @@ def web_search_context(query: str) -> str:
 
 
 def stream_assistant_reply(user_input: str, prenom: str = None, history: list = None):
-    """Génère la réponse de Floreina avec Groq via une requête HTTP directe et conforme."""
+    """Génère la réponse de Floreina avec Groq via le client OpenAI universel."""
     text = user_input.strip()
     api_key = get_api_key()
     
@@ -79,55 +83,39 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
     if any(kw in text.lower() for kw in mots_cles):
         web_context = web_search_context(text)
 
-    # Alignement parfait de la structure des messages pour Groq
-    messages = [{"role": "system", "content": system_instruction}]
-    for msg in history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    
-    prompt_final = text
-    if web_context:
-        prompt_final = f"[Données Web en temps réel] :\n{web_context}\n\nRequête : {text}"
-    messages.append({"role": "user", "content": prompt_final})
+    # Utilisation du client universel configuré spécialement pour Groq
+    if OpenAI:
+        try:
+            client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=api_key
+            )
+            
+            messages = [{"role": "system", "content": system_instruction}]
+            for msg in history:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            
+            prompt_final = text
+            if web_context:
+                prompt_final = f"[Données Web en temps réel] :\n{web_context}\n\nRequête : {text}"
+            messages.append({"role": "user", "content": prompt_final})
 
-    # Correction critique de l'URL : Ajout du sous-domaine correct exigé par Groq
-    url = "https://groq.com"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": messages,
-        "temperature": 0.7,
-        "stream": True  # Permet le rendu fluide mot par mot
-    }
-
-    try:
-        # Envoi direct du message
-        response = requests.post(url, headers=headers, json=payload, stream=True, timeout=15)
-        
-        if response.status_code != 200:
-            yield f"❌ Erreur API Groq ({response.status_code}) : {response.text}"
-            return
-
-        # Lecture ligne par ligne du streaming de Groq
-        for line in response.iter_lines():
-            if line:
-                decoded_line = line.decode('utf-8').strip()
-                if decoded_line.startswith("data: "):
-                    data_str = decoded_line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        data_json = json.loads(data_str)
-                        if 'choices' in data_json and len(data_json['choices']) > 0:
-                            content = data_json['choices'][0]['delta'].get('content', '')
-                            if content:
-                                yield content
-                    except Exception:
-                        continue
-    except Exception as e:
-        yield f"Erreur de connexion réseau : {str(e)}"
+            # Appel officiel sécurisé en flux mot par mot (Streaming)
+            response_stream = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                temperature=0.7,
+                stream=True
+            )
+            for chunk in response_stream:
+                if chunk.choices and len(chunk.choices) > 0:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        yield content
+        except Exception as e:
+            yield f"Erreur technique de l'IA : {str(e)}"
+    else:
+        yield "La bibliothèque indispensable de connexion n'est pas encore prête sur le serveur."
 
 
 # --- INTERFACE GRAPHIQUE STREAMLIT ---
