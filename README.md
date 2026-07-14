@@ -1,8 +1,6 @@
-# :earth_americas: GDP dashboard template
+# 🤖 Floreina - Votre Mini-IA
 
-A simple Streamlit app showing the GDP of different countries in the world.
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://gdp-dashboard-template.streamlit.app/)
+Une petite application Streamlit qui simule une conversation simple avec une IA française.
 
 ### How to run it on your own machine
 
@@ -17,3 +15,11 @@ A simple Streamlit app showing the GDP of different countries in the world.
    ```
    $ streamlit run streamlit_app.py
    ```
+
+Vous pouvez tester des phrases comme :
+
+- Bonjour
+- Je m'appelle Alice
+- Quelle heure est-il ?
+- Pile ou face
+- Question à la boule magique
