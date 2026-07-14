@@ -15,24 +15,16 @@ ADMIN_PASSWORD = "21082022"  # Votre mot de passe administrateur
 
 
 def get_api_key():
-    """Récupère votre clé Groq configurée en secret sur le serveur."""
-    if "groq_api_key" in st.session_state and st.session_state.groq_api_key:
-        return st.session_state.groq_api_key
-  def get_api_key():
     """Détecteur universel pour trouver la clé API peu importe son nom."""
-    # 1. Vérification dans la session active
     for key in ["groq_api_key", "gemini_api_key", "api_key"]:
         if key in st.session_state and st.session_state[key]:
             return st.session_state[key]
     
-    # 2. Vérification dans les variables d'environnement système
     for env_var in ["GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"]:
         if os.getenv(env_var):
             return os.getenv(env_var)
             
-    # 3. Vérification approfondie dans les secrets du serveur Streamlit
     try:
-        # On cherche si un secret existe, peu importe sa casse (majuscule/minuscule)
         for secret_key in st.secrets.keys():
             if secret_key.upper() in ["GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"]:
                 return st.secrets[secret_key]
@@ -40,32 +32,6 @@ def get_api_key():
         pass
         
     return None
-
-    # 1. Vérifie si elle est dans la session Streamlit
-    if "groq_api_key" in st.session_state and st.session_state.groq_api_key:
-        return st.session_state.groq_api_key
-    
-    # 2. Vérifie dans l'environnement ou les Secrets système de Streamlit Cloud
-    env_key = os.getenv("GROQ_API_KEY")
-    if env_key:
-        return env_key
-        
-    try:
-        # Recherche prioritaire de la clé Groq ou d'un fallback
-        if "GROQ_API_KEY" in st.secrets:
-            return st.secrets["GROQ_API_KEY"]
-        elif "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        pass
-        
-    return None
-    if env_key:
-        return env_key
-    try:
-        return st.secrets["GROQ_API_KEY"]
-    except Exception:
-        return None
 
 
 def web_search_context(query: str) -> str:
@@ -120,9 +86,8 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
     # Connexion à Groq (via l'interface compatible OpenAI)
     if OpenAI:
         try:
-            # On configure le client OpenAI pour pointer vers l'adresse internet de Groq
             client = OpenAI(
-                base_url="https://api.groq.com/openai/v1",
+                base_url="https://groq.com",
                 api_key=api_key
             )
             
@@ -135,7 +100,6 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
                 prompt_final = f"[Données Web en temps réel] :\n{web_context}\n\nRequête : {text}"
             messages.append({"role": "user", "content": prompt_final})
 
-            # Appel du modèle Llama 3 ultra-rapide hébergé chez Groq
             response_stream = client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=messages,
@@ -143,8 +107,8 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
                 stream=True
             )
             for chunk in response_stream:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+                if chunk.choices and chunk.choices.delta.content:
+                    yield chunk.choices.delta.content
         except Exception as e:
             yield f"Erreur technique Groq : {str(e)}"
     else:
