@@ -5,30 +5,24 @@ import streamlit as st
 from bs4 import BeautifulSoup
 
 try:
-    from google import genai
-    from google.genai import types
-except ImportError:
-    genai = None
-
-try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
 
 # --- CONFIGURATION SÉCURISÉE ---
 MAX_MESSAGES_PER_SESSION = 15  # Limite pour les utilisateurs normaux
-ADMIN_PASSWORD = "21082022"  # 👈 Votre nouveau mot de passe administrateur
+ADMIN_PASSWORD = "21082022"  # Votre mot de passe administrateur
 
 
 def get_api_key():
-    """Récupère votre clé API configurée en secret sur le serveur."""
-    if "gemini_api_key" in st.session_state and st.session_state.gemini_api_key:
-        return st.session_state.gemini_api_key
-    env_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY")
+    """Récupère votre clé Groq configurée en secret sur le serveur."""
+    if "groq_api_key" in st.session_state and st.session_state.groq_api_key:
+        return st.session_state.groq_api_key
+    env_key = os.getenv("GROQ_API_KEY")
     if env_key:
         return env_key
     try:
-        return st.secrets["GEMINI_API_KEY"]
+        return st.secrets["GROQ_API_KEY"]
     except Exception:
         return None
 
@@ -53,17 +47,17 @@ def web_search_context(query: str) -> str:
 
 
 def stream_assistant_reply(user_input: str, prenom: str = None, history: list = None):
-    """Génère la réponse de Floreina avec votre clé secrète."""
+    """Génère la réponse de Floreina avec votre clé Groq en utilisant l'adresse compatible OpenAI."""
     text = user_input.strip()
     api_key = get_api_key()
     
     if not api_key:
-        yield "⚠️ Configuration incomplète : L'administrateur n'a pas configuré la clé API sur le serveur."
+        yield "⚠️ Configuration incomplète : L'administrateur n'a pas configuré la clé GROQ_API_KEY dans les Secrets."
         return
 
     history = history or []
 
-    # Personalisation de l'accueil pour le créateur (Admin)
+    # Personnalisation de l'accueil pour l'administrateur
     est_admin = st.session_state.get("is_admin", False)
     nom_role = "mon Créateur et Développeur" if est_admin else (prenom if prenom else 'un ami')
 
@@ -71,7 +65,8 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
         "Tu es Floreina, une IA conversationnelle polyvalente, amicale et experte.\n"
         "1. PARLE AVEC LES GENS : Sois chaleureuse, pose des questions, sois naturelle.\n"
         "2. PROPOSER DES SOLUTIONS : Donne des plans d'action clairs, des étapes logiques.\n"
-        "3. TROUVER DES RÉPONSES : Réponds précisément à tout (code, calculs, rédaction, culture).\n\n"
+        "3. TROUVER DES RÉPONSES : Réponds précisément à tout (code, calculs, rédaction, culture).\n"
+        "Réponds toujours directement en français de manière fluide.\n\n"
         f"Tu discutes actuellement avec {nom_role}. "
         f"Nous sommes le {datetime.datetime.now().strftime('%d/%m/%Y à %H:%M')}."
     )
@@ -81,59 +76,43 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
     if any(kw in text.lower() for kw in mots_cles):
         web_context = web_search_context(text)
 
-    # Exécution Gemini
-    if genai and ("gemini" in api_key.lower() or "google" in api_key.lower() or len(api_key) > 30):
+    # Connexion à Groq (via l'interface compatible OpenAI)
+    if OpenAI:
         try:
-            client = genai.Client(api_key=api_key)
-            contents = []
-            for msg in history:
-                role = "user" if msg["role"] == "user" else "model"
-                contents.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
-            
-            prompt_final = text
-            if web_context:
-                prompt_final = f"[Données Web] :\n{web_context}\n\nRequête : {text}"
-                
-            contents.append(types.Content(role="user", parts=[types.Part.from_text(text=prompt_final)]))
-
-            response_stream = client.models.generate_content_stream(
-                model='gemini-2.5-flash',
-                contents=contents,
-                config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.7),
+            # On configure le client OpenAI pour pointer vers l'adresse internet de Groq
+            client = OpenAI(
+                base_url="https://api.groq.com/openai/v1",
+                api_key=api_key
             )
-            for chunk in response_stream:
-                if chunk.text:
-                    yield chunk.text
-        except Exception as e:
-            yield f"Erreur technique : {str(e)}"
-
-    # Exécution OpenAI
-    elif OpenAI:
-        try:
-            client = OpenAI(api_key=api_key)
+            
             messages = [{"role": "system", "content": system_instruction}]
             for msg in history:
                 messages.append({"role": msg["role"], "content": msg["content"]})
             
             prompt_final = text
             if web_context:
-                prompt_final = f"[Données Web] :\n{web_context}\n\nRequête : {text}"
+                prompt_final = f"[Données Web en temps réel] :\n{web_context}\n\nRequête : {text}"
             messages.append({"role": "user", "content": prompt_final})
 
+            # Appel du modèle Llama 3 ultra-rapide hébergé chez Groq
             response_stream = client.chat.completions.create(
-                model="gpt-4o-mini", messages=messages, temperature=0.7, stream=True
+                model="llama-3.3-70b-versatile",
+                messages=messages,
+                temperature=0.7,
+                stream=True
             )
             for chunk in response_stream:
-                if chunk.choices.delta.content:
-                    yield chunk.choices.delta.content
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
         except Exception as e:
-            yield f"Erreur technique : {str(e)}"
+            yield f"Erreur technique Groq : {str(e)}"
+    else:
+        yield "Erreur : La bibliothèque 'openai' est manquante dans votre environnement."
 
 
 # --- INTERFACE GRAPHIQUE STREAMLIT ---
 st.title("Floreina IA 🤖✨")
 
-# Initialisation des variables de session
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "user_usage_count" not in st.session_state:
@@ -141,11 +120,9 @@ if "user_usage_count" not in st.session_state:
 if "is_admin" not in st.session_state:
     st.session_state.is_admin = False
 
-# Barre latérale (Gestion des droits d'accès)
+# Barre latérale
 with st.sidebar:
     st.subheader("🔑 Espace Connexion")
-    
-    # Saisie du mot de passe
     input_password = st.text_input("Code secret Administrateur", type="password", placeholder="Entrez le code...")
     
     if input_password == ADMIN_PASSWORD:
@@ -170,9 +147,8 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Zone d'écriture des messages
+# Entrée utilisateur
 if user_query := st.chat_input("Discutez avec Floreina..."):
-    
     if not st.session_state.is_admin and st.session_state.user_usage_count >= MAX_MESSAGES_PER_SESSION:
         st.error(f"Quota de {MAX_MESSAGES_PER_SESSION} messages atteint pour les invités.")
     else:
