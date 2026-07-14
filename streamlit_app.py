@@ -18,8 +18,29 @@ def get_api_key():
     """Récupère votre clé Groq configurée en secret sur le serveur."""
     if "groq_api_key" in st.session_state and st.session_state.groq_api_key:
         return st.session_state.groq_api_key
-def get_api_key():
-    """Récupère votre clé Groq de manière universelle."""
+  def get_api_key():
+    """Détecteur universel pour trouver la clé API peu importe son nom."""
+    # 1. Vérification dans la session active
+    for key in ["groq_api_key", "gemini_api_key", "api_key"]:
+        if key in st.session_state and st.session_state[key]:
+            return st.session_state[key]
+    
+    # 2. Vérification dans les variables d'environnement système
+    for env_var in ["GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"]:
+        if os.getenv(env_var):
+            return os.getenv(env_var)
+            
+    # 3. Vérification approfondie dans les secrets du serveur Streamlit
+    try:
+        # On cherche si un secret existe, peu importe sa casse (majuscule/minuscule)
+        for secret_key in st.secrets.keys():
+            if secret_key.upper() in ["GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"]:
+                return st.secrets[secret_key]
+    except Exception:
+        pass
+        
+    return None
+
     # 1. Vérifie si elle est dans la session Streamlit
     if "groq_api_key" in st.session_state and st.session_state.groq_api_key:
         return st.session_state.groq_api_key
