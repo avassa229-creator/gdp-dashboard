@@ -54,7 +54,7 @@ def web_search_context(query: str) -> str:
 
 
 def stream_assistant_reply(user_input: str, prenom: str = None, history: list = None):
-    """Génère la réponse de Floreina avec votre clé Groq en utilisant l'adresse compatible OpenAI."""
+    """Génère la réponse de Floreina avec votre clé Groq."""
     text = user_input.strip()
     api_key = get_api_key()
     
@@ -83,7 +83,6 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
     if any(kw in text.lower() for kw in mots_cles):
         web_context = web_search_context(text)
 
-    # Connexion à Groq (via l'interface compatible OpenAI)
     if OpenAI:
         try:
             client = OpenAI(
@@ -101,14 +100,14 @@ def stream_assistant_reply(user_input: str, prenom: str = None, history: list = 
             messages.append({"role": "user", "content": prompt_final})
 
             response_stream = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama3-70b-8192",
                 messages=messages,
                 temperature=0.7,
                 stream=True
             )
             for chunk in response_stream:
-                if chunk.choices and chunk.choices.delta.content:
-                    yield chunk.choices.delta.content
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
         except Exception as e:
             yield f"Erreur technique Groq : {str(e)}"
     else:
